@@ -9,3 +9,4 @@ models/
 .DS_Store
 面试总结.md
 qt-rag-demo-prompt.md
+frpc-qtqa.toml
