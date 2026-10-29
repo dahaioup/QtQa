@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qt 开发经验知识库 · RAG 问答</title>
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --accent: #41cd52; --text: #1f2329;
+    --muted: #8a919f; --border: #e4e7ed;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg); color: var(--text); height: 100vh;
+    display: flex; flex-direction: column;
+  }
+  header {
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: 14px 24px; display: flex; align-items: center; gap: 12px;
+  }
+  header .logo { font-size: 22px; }
+  header h1 { font-size: 17px; font-weight: 600; }
+  header .status { margin-left: auto; display: flex; flex-direction: column; gap: 3px; align-items: flex-end; }
+  header .status .row { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+  header .chip {
+    font-size: 11px; color: var(--muted); background: var(--bg);
+    border: 1px solid var(--border); border-radius: 999px; padding: 2px 9px; white-space: nowrap;
+  }
+  header .chip b { color: var(--accent); font-weight: 600; }
+  header .chip.warn b { color: #d97706; }
+  header .chip .bar {
+    display: inline-block; width: 36px; height: 5px; border-radius: 3px;
+    background: var(--border); margin-left: 5px; vertical-align: 1px; overflow: hidden;
+  }
+  header .chip .bar i { display: block; height: 100%; background: var(--accent); }
+  header .chip.warn .bar i { background: #d97706; }
+
+  #chat { flex: 1; overflow-y: auto; padding: 24px; max-width: 860px; width: 100%; margin: 0 auto; }
+  .msg { margin-bottom: 18px; display: flex; flex-direction: column; }
+  .msg .role { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .msg .bubble {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 12px 16px; line-height: 1.75; font-size: 15px; white-space: pre-wrap;
+    word-break: break-word;
+  }
+  .msg.user { align-items: flex-end; }
+  .msg.user .bubble { background: #e8f7ea; border-color: #cdeed3; }
+
+  .sources { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+  .sources summary {
+    cursor: pointer; font-size: 12px; color: var(--muted); user-select: none;
+    list-style: none;
+  }
+  .sources summary::before { content: "▸ "; }
+  .sources[open] summary::before { content: "▾ "; }
+  .src-card {
+    background: #fafbfc; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; font-size: 13px;
+  }
+  .src-card .meta { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
+  .src-card .idx {
+    background: var(--accent); color: #fff; border-radius: 4px;
+    padding: 0 6px; font-size: 11px; flex-shrink: 0;
+  }
+  .src-card .path { color: var(--muted); font-size: 12px; word-break: break-all; }
+  .src-card .sec { color: #2b6cb0; font-size: 12px; margin-bottom: 4px; }
+  .src-card .text { color: #444; line-height: 1.6; white-space: pre-wrap; max-height: 200px; overflow-y: auto; }
+
+  .meta-line { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  footer { background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; }
+  .input-row { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; }
+  #q {
+    flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
+    font-size: 15px; outline: none; background: #fff;
+  }
+  #q:focus { border-color: var(--accent); }
+  #send {
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+    padding: 0 22px; font-size: 15px; cursor: pointer;
+  }
+  #send:disabled { background: #b7e0bd; cursor: not-allowed; }
+  .hints { max-width: 860px; margin: 8px auto 0; display: flex; gap: 8px; flex-wrap: wrap; }
+  .hint {
+    font-size: 12px; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 12px; padding: 3px 10px; cursor: pointer; background: #fff;
+  }
+  .hint:hover { border-color: var(--accent); color: var(--accent); }
+  .cursor { display: inline-block; width: 8px; background: var(--accent); animation: blink 1s infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">🟩</span>
+  <h1>Qt 开发经验知识库 · RAG 问答</h1>
+  <div class="status" id="status">加载中…</div>
+</header>
+
+<div id="chat">
+  <div class="msg assistant">
+    <div class="role">助手</div>
+    <div class="bubble">你好，我是 Qt 开发经验知识库问答助手。基于本仓库收录的 Qt 开发经验文档回答，每个结论都带引用编号，可以点开下方引用卡片查看原文。</div>
+  </div>
+</div>
+
+<footer>
+  <div class="input-row">
+    <input id="q" placeholder="问一个 Qt 问题，如：信号槽的第五个参数有什么作用" autocomplete="off">
+    <button id="send">发送</button>
+  </div>
+  <div class="hints">
+    <span class="hint">信号槽连接方式有哪几种</span>
+    <span class="hint">Qt 跨线程更新 UI 的正确做法</span>
+    <span class="hint">QTableView 怎么做分页</span>
+    <span class="hint">Qt 6 的 CMake 最低版本要求</span>
+    <span class="hint" id="clearHist" style="color:#a15c3b">🗑 清空历史</span>
+  </div>
+</footer>
+
+<script>
+const chat = document.getElementById('chat');
+const q = document.getElementById('q');
+const send = document.getElementById('send');
+const statusEl = document.getElementById('status');
+let history = [];
+let busy = false;
+// ── 本地历史会话（localStorage）：刷新/重启浏览器后自动恢复 ──
+const LOG_KEY = 'qt-rag-chat';
+const PEND_KEY = 'qt-rag-pending';   // 进行中一轮的 {turn_id, q}；刷新后凭 turn_id 向 /chat/resume 重连续流
+const TURNS_MAX = 20;          // 最多保留最近 20 轮，防 localStorage 超配额
+let turns = (() => {
+  try { return JSON.parse(localStorage.getItem(LOG_KEY)) || []; } catch (_) { return []; }
+})();
+function saveTurns() {
+  try { localStorage.setItem(LOG_KEY, JSON.stringify(turns.slice(-TURNS_MAX))); } catch (_) {}
+}
+function renderTurn(t) {
+  addMsg('user', t.q);
+  const bubble = addMsg('assistant', t.a);
+  if (t.sources) renderSources(bubble, t.sources);
+  if (t.meta) {
+    const m = document.createElement('div');
+    m.className = 'meta-line';
+    m.textContent = t.meta;
+    bubble.parentElement.appendChild(m);
+  }
+}
+
+function fmtUptime(sec) {
+  if (sec < 90) return Math.round(sec) + '秒';
+  if (sec < 5400) return Math.round(sec / 60) + '分';
+  return (sec / 3600).toFixed(1) + '小时';
+}
+
+function pollHealth() {
+  fetch('/health').then(r => r.json()).then(h => {
+    // 服务配置行
+    const cfg = [
+      `<span class="chip" title="对话模型（llama.cpp / GGUF）">模型 <b>${h.chat_model}</b></span>`,
+      `<span class="chip" title="向量模型">嵌入 <b>${(h.embed_model || '').split('/').pop()}</b></span>`,
+      `<span class="chip" title="上下文窗口 / 推理线程 / 批大小">ctx <b>${h.n_ctx}</b> · 线程 <b>${h.n_threads}</b> · batch <b>${h.n_batch}</b></span>`,
+      `<span class="chip" title="生成温度 / 最大 token / 检索条数">temp <b>${h.temperature}</b> · max <b>${h.max_tokens}</b> · top-k <b>${h.top_k}</b></span>`,
+      `<span class="chip" title="向量库索引块数">索引 <b>${h.chunks}</b> 块</span>`,
+    ].join('');
+    // 资源消耗行
+    let memPct = null;
+    if (h.mem_total_gb) memPct = Math.round((h.mem_total_gb - (h.mem_avail_gb ?? 0)) / h.mem_total_gb * 100);
+    const memWarn = memPct !== null && memPct >= 80;
+    const loadWarn = h.load1 >= 12;   // 12 线程机器，load≥12 即打满
+    const cpuTxt = h.cpu_logical
+      ? `${h.cpu_physical}核${h.cpu_logical}线程${h.cpu_freq_ghz ? ` @ ${h.cpu_freq_ghz}GHz` : ''}` : '-';
+    const res = [
+      `<span class="chip" title="CPU 物理核 / 逻辑线程 / 标称主频">CPU <b>${cpuTxt}</b></span>`,
+      `<span class="chip${memWarn ? ' warn' : ''}" title="服务进程常驻内存">进程 <b>${h.rss_mb}</b>MB</span>`,
+      `<span class="chip${memWarn ? ' warn' : ''}" title="整机内存 已用/总容量">内存 <b>${memPct ?? '-'}%</b><span class="bar"><i style="width:${memPct ?? 0}%"></i></span>${h.mem_total_gb ? ` ${h.mem_avail_gb}GB 可用/共 ${h.mem_total_gb}GB` : ''}</span>`,
+      `<span class="chip${loadWarn ? ' warn' : ''}" title="1 分钟系统负载（≥12 表示 12 线程打满）">负载 <b>${h.load1}</b></span>`,
+      `<span class="chip" title="服务已运行时间">已运行 <b>${fmtUptime(h.uptime_sec)}</b></span>`,
+    ].join('');
+    statusEl.innerHTML = `<div class="row">${cfg}</div><div class="row">${res}</div>`;
+  }).catch(() => {
+    statusEl.innerHTML = `<div class="row"><span class="chip warn">服务不可达</span></div>`;
+  });
+}
+pollHealth();
+setInterval(pollHealth, 10000);
+
+function addMsg(role, text) {
+  const msg = document.createElement('div');
+  msg.className = 'msg ' + role;
+  msg.innerHTML = `<div class="role">${role === 'user' ? '我' : '助手'}</div><div class="bubble"></div>`;
+  msg.querySelector('.bubble').textContent = text || '';
+  chat.appendChild(msg);
+  chat.scrollTop = chat.scrollHeight;
+  return msg.querySelector('.bubble');
+}
+
+function renderSources(container, sources) {
+  const wrap = document.createElement('details');
+  wrap.className = 'sources';
+  const summary = document.createElement('summary');
+  summary.textContent = `引用 ${sources.length} 个片段（点击展开原文）`;
+  wrap.appendChild(summary);
+  sources.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'src-card';
+    card.innerHTML = `
+      <div class="meta"><span class="idx">${i + 1}</span><span class="path">${s.source} · 相关度 ${(s.score * 100).toFixed(0)}%</span></div>
+      <div class="sec">📍 ${s.section}</div>
+      <div class="text"></div>`;
+    card.querySelector('.text').textContent = s.text;
+    wrap.appendChild(card);
+  });
+  container.parentElement.appendChild(wrap);
+}
+
+let abortCtrl = null;   // 当前请求的中断控制器（停止按钮用）
+
+async function ask(question) {
+  if (busy || !question.trim()) return;
+  busy = true;
+  send.textContent = '⏹ 停止';   // 发送按钮变身停止按钮
+  abortCtrl = new AbortController();
+  // 每轮生成唯一 id，随请求发给服务端；写入 pending，刷新后用于 /chat/resume 重连
+  const tid = (crypto.randomUUID ? crypto.randomUUID() : 't' + Date.now() + '-' + Math.random().toString(36).slice(2));
+  try { localStorage.setItem(PEND_KEY, JSON.stringify({ turn_id: tid, q: question })); } catch (_) {}
+  addMsg('user', question);
+  const bubble = addMsg('assistant', '正在检索资料…');   // 首 token 前的沉默期提示（1.5B prompt 评估 15-40s）
+  let answer = '';
+  let srcData = null, metaLine = null;   // 持久化用：引用片段 + 耗时行
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  cursor.textContent = '▍';
+  bubble.appendChild(cursor);
+
+  try {
+    const resp = await fetch('/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, history, turn_id: tid }),
+      signal: abortCtrl.signal   // 停止按钮触发 abort，reader.read() 抛 AbortError
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const events = buf.split('\n\n');
+      buf = events.pop();
+      for (const ev of events) {
+        const lines = ev.split('\n');
+        const type = (lines.find(l => l.startsWith('event:')) || '').slice(6).trim();
+        const data = (lines.find(l => l.startsWith('data:')) || '').slice(5).trim();
+        if (!type || !data) continue;
+        if (type === 'sources') {
+          srcData = JSON.parse(data);
+          renderSources(bubble, srcData);
+        } else if (type === 'token') {
+          // 服务端 data 是 json.dumps 的字符串（带引号、\n 会转义），必须 JSON.parse
+          let t; try { t = JSON.parse(data); } catch (_) { t = data; }
+          answer += (typeof t === 'string') ? t : String(data);
+          bubble.textContent = answer;
+          bubble.appendChild(cursor);
+          chat.scrollTop = chat.scrollHeight;
+        } else if (type === 'done') {
+          const d = JSON.parse(data);
+          const meta = document.createElement('div');
+          meta.className = 'meta-line';
+          meta.textContent = `⏱ 首字 ${d.first_token_sec ?? '—'}s · 总耗时 ${d.elapsed_sec}s`;
+          bubble.parentElement.appendChild(meta);
+          metaLine = meta.textContent;
+        }
+      }
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      // 用户点了停止：保留已流出的部分答案，标注停止
+      bubble.textContent = answer || '⏹ 已停止生成';
+      const meta = document.createElement('div');
+      meta.className = 'meta-line';
+      meta.textContent = '⏹ 已停止生成';
+      bubble.parentElement.appendChild(meta);
+      metaLine = meta.textContent;
+    } else {
+      bubble.textContent = '请求失败：' + e.message;
+    }
+  }
+  cursor.remove();
+  history.push({ role: 'user', content: question });
+  history.push({ role: 'assistant', content: answer });
+  if (history.length > 6) history = history.slice(-6);
+  turns.push({ q: question, a: answer, sources: srcData, meta: metaLine });
+  if (turns.length > TURNS_MAX) turns = turns.slice(-TURNS_MAX);
+  saveTurns();
+  try { localStorage.removeItem(PEND_KEY); } catch (_) {}   // 本轮已落档，清掉 pending
+  busy = false;
+  send.textContent = '发送';
+  abortCtrl = null;
+}
+
+function stopCurrent() {
+  // 停止 = 断本地流 + 告诉服务端停（生成在后台线程，只断 SSE 它会跑完全场）
+  if (abortCtrl) abortCtrl.abort();
+  fetch('/cancel', { method: 'POST' }).catch(() => {});
+}
+send.onclick = () => {
+  if (busy) stopCurrent();
+  else { ask(q.value); q.value = ''; }
+};
+// 中文输入法组字中（拼音选词）的回车用于上屏英文/确认组字，不当发送：
+// 组字期间（compositionstart→end）或 e.isComposing 时忽略；组字结束 300ms 内的
+// 「幽灵回车」也忽略（macOS 确认组字后会紧发一个 Enter）。生成中回车 = 停止。
+let composing = false, composeEnd = 0;
+q.addEventListener('compositionstart', () => { composing = true; });
+q.addEventListener('compositionend', () => { composing = false; composeEnd = Date.now(); });
+q.onkeydown = e => {
+  if (e.key !== 'Enter' || e.shiftKey) return;   // Shift+Enter 纯换行
+  if (busy) { stopCurrent(); return; }
+  if (composing || e.isComposing || e.keyCode === 229) return;
+  if (Date.now() - composeEnd < 300) return;
+  e.preventDefault();
+  ask(q.value); q.value = '';
+};
+document.querySelectorAll('.hint').forEach(h => {
+  if (h.id === 'clearHist') return;              // 清空按钮不走提问
+  h.onclick = () => { ask(h.textContent); };
+});
+document.getElementById('clearHist').onclick = () => {
+  if (!turns.length) return;
+  if (!confirm('清空本地历史会话（最近 20 轮）？')) return;
+  turns = [];
+  try { localStorage.removeItem(LOG_KEY); } catch (_) {}
+  history = [];
+  [...chat.querySelectorAll('.msg')].forEach((m, i) => { if (i > 0) m.remove(); });  // 保留开场白
+};
+// 页面加载/刷新：重放本地历史（问题+答案+引用卡片+耗时行），并重建 LLM 上下文
+for (const t of turns) renderTurn(t);
+history = turns.slice(-3).flatMap(t => [
+  { role: 'user', content: t.q },
+  { role: 'assistant', content: t.a },
+]);
+
+// 刷新重连：上一轮若还没答完（pending 存在），凭 turn_id 向服务端要结果。
+// 槽还在 → 回放/跟随事件流把答案补齐；槽被覆盖或服务器重启 → 标注异常中断。
+(async () => {
+  let pend = null;
+  try { pend = JSON.parse(localStorage.getItem(PEND_KEY)); } catch (_) {}
+  if (!pend || !pend.turn_id) return;
+  let resp;
+  try { resp = await fetch('/chat/resume?turn_id=' + encodeURIComponent(pend.turn_id)); }
+  catch (_) { resp = null; }
+  if (!resp || resp.status === 409) {
+    // 服务器没有这轮会话（新请求覆盖了槽 / 服务端重启）：显示异常中断
+    renderTurn({ q: pend.q, a: '（未收到答案）', sources: null,
+                 meta: '⚠ 该会话异常中断（服务器未保留此轮结果）' });
+    history.push({ role: 'user', content: pend.q });
+    history.push({ role: 'assistant', content: '' });
+    if (history.length > 6) history = history.slice(-6);
+    try { localStorage.removeItem(PEND_KEY); } catch (_) {}
+    return;
+  }
+  // 槽还在：渲染问题气泡，回放已产生的事件并跟随到 done。
+  // 重连期间同样进入忙碌态：按钮变 ⏹ 停止（stopCurrent 会同时 /cancel 服务端）
+  busy = true;
+  send.textContent = '⏹ 停止';
+  abortCtrl = new AbortController();
+  try { resp = await fetch('/chat/resume?turn_id=' + encodeURIComponent(pend.turn_id),
+                           { signal: abortCtrl.signal }); }
+  catch (e) {
+    if (e && e.name === 'AbortError') return;   // 重连途中被停止，无内容可渲染
+    resp = null;
+  }
+  addMsg('user', pend.q);
+  const bubble = addMsg('assistant', '正在检索资料…');   // 首 token 前的沉默期提示（1.5B prompt 评估 15-40s）
+  let answer = '', srcData = null, metaLine = '';
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const events = buf.split('\n\n');
+      buf = events.pop();
+      for (const ev of events) {
+        const lines = ev.split('\n');
+        const type = (lines.find(l => l.startsWith('event:')) || '').slice(6).trim();
+        const data = (lines.find(l => l.startsWith('data:')) || '').slice(5).trim();
+        if (!type || !data) continue;
+        if (type === 'sources') {
+          srcData = JSON.parse(data);
+          renderSources(bubble, srcData);
+        } else if (type === 'token') {
+          let t; try { t = JSON.parse(data); } catch (_) { t = data; }
+          answer += (typeof t === 'string') ? t : String(data);
+          bubble.textContent = answer;
+          chat.scrollTop = chat.scrollHeight;
+        } else if (type === 'done') {
+          const d = JSON.parse(data);
+          metaLine = d.cancelled ? '⏹ 已停止生成'
+            : `⏱ 首字 ${d.first_token_sec ?? '—'}s · 总耗时 ${d.elapsed_sec}s`;
+        } else if (type === 'interrupted') {
+          metaLine = '⚠ 该会话异常中断（结果被更新的会话覆盖）';
+          break;
+        }
+      }
+    }
+  } catch (e) {
+    if (e && e.name === 'AbortError') {
+      // 重连跟随途中被停止：保留已收到的部分，标注后照常入档
+      metaLine = '⏹ 已停止生成';
+      bubble.textContent = answer || '⏹ 已停止生成';
+    }
+  }
+  if (metaLine) {
+    const meta = document.createElement('div');
+    meta.className = 'meta-line';
+    meta.textContent = metaLine;
+    bubble.parentElement.appendChild(meta);
+  }
+  // 补齐后照常入档 + 重建 LLM 上下文；退出忙碌态
+  history.push({ role: 'user', content: pend.q });
+  history.push({ role: 'assistant', content: answer });
+  if (history.length > 6) history = history.slice(-6);
+  turns.push({ q: pend.q, a: answer, sources: srcData, meta: metaLine });
+  if (turns.length > TURNS_MAX) turns = turns.slice(-TURNS_MAX);
+  saveTurns();
+  try { localStorage.removeItem(PEND_KEY); } catch (_) {}
+  busy = false;
+  send.textContent = '发送';
+  abortCtrl = null;
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+.venv/
+.venv.py313/
+__pycache__/
+*.pyc
+corpus/
+data/
+models/
+*.log
+.DS_Store
+面试总结.md
+qt-rag-demo-prompt.md
