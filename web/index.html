@@ -70,6 +70,14 @@
   .meta-line { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
   footer { background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; }
+  .oss { max-width: 860px; margin: 12px auto 0; font-size: 13px; color: #6b7280; }
+  .oss summary { cursor: pointer; user-select: none; }
+  .oss summary a { color: #3b82f6; text-decoration: none; font-weight: 600; margin: 0 2px; }
+  .oss summary a:hover { text-decoration: underline; }
+  .oss-card { margin-top: 8px; background: #f9fafb; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; line-height: 1.7; }
+  .oss-card p { margin: 6px 0; }
+  .oss-card a { color: #3b82f6; text-decoration: none; font-weight: 600; }
+  .oss-card a:hover { text-decoration: underline; }
   .input-row { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; }
   #q {
     flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
@@ -117,6 +125,13 @@
     <span class="hint">Qt 6 的 CMake 最低版本要求</span>
     <span class="hint" id="clearHist" style="color:#a15c3b">🗑 清空历史</span>
   </div>
+  <details class="oss">
+    <summary>开源项目 · <a href="https://github.com/dahaioup/QtQa" target="_blank" rel="noopener">QtQa</a> · <a href="https://github.com/dahaioup/npa" target="_blank" rel="noopener">NPA</a></summary>
+    <div class="oss-card">
+      <p><b><a href="https://github.com/dahaioup/QtQa" target="_blank" rel="noopener">QtQa</a></b> — 本项目。Qt 开发经验知识库 RAG 问答系统：bge 向量 + BM25 混合检索，Qwen2.5-1.5B 纯 CPU 本地生成，SSE 流式回答、引用溯源与三层防幻觉（资料外问题一律答「资料中未提及」），刷新断线自动续传。</p>
+      <p><b><a href="https://github.com/dahaioup/npa" target="_blank" rel="noopener">NPA (Node Proxy Agent)</a></b> — 单二进制、跨平台的内网节点管理代理：通过反向出站连接把分散在内网的 Windows/Linux/macOS 机器聚合成可管理网格，提供远程执行、文件分发、隧道映射、桌面控制与内置 MCP 工具面（可被任意 AI 程序直接驱动），支持守护式自动升级。</p>
+    </div>
+  </details>
 </footer>
 
 <script>
