@@ -70,14 +70,30 @@
   .meta-line { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
   footer { background: var(--card); border-top: 1px solid var(--border); padding: 16px 24px; }
-  .oss { max-width: 860px; margin: 12px auto 0; font-size: 13px; color: #6b7280; }
-  .oss summary { cursor: pointer; user-select: none; }
-  .oss summary a { color: #3b82f6; text-decoration: none; font-weight: 600; margin: 0 2px; }
-  .oss summary a:hover { text-decoration: underline; }
-  .oss-card { margin-top: 8px; background: #f9fafb; border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; line-height: 1.7; }
-  .oss-card p { margin: 6px 0; }
-  .oss-card a { color: #3b82f6; text-decoration: none; font-weight: 600; }
-  .oss-card a:hover { text-decoration: underline; }
+  .oss-btn {
+    margin-left: 10px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    background: #fff; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,.06); white-space: nowrap;
+  }
+  .oss-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .oss-modal-mask {
+    display: none; position: fixed; inset: 0; background: rgba(15,23,42,.45);
+    z-index: 100; align-items: center; justify-content: center; padding: 20px;
+  }
+  .oss-modal-mask.show { display: flex; }
+  .oss-modal {
+    background: var(--card); border-radius: 12px; max-width: 640px; width: 100%;
+    max-height: 80vh; overflow-y: auto; padding: 22px 26px; box-shadow: 0 12px 40px rgba(0,0,0,.25);
+  }
+  .oss-modal h2 { font-size: 17px; margin-bottom: 14px; }
+  .oss-modal .proj { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin-bottom: 12px; line-height: 1.8; }
+  .oss-modal .proj b { font-size: 14px; }
+  .oss-modal .proj a { color: #3b82f6; text-decoration: none; font-weight: 600; }
+  .oss-modal .proj a:hover { text-decoration: underline; }
+  .oss-modal .proj p { font-size: 13px; color: #444; margin-top: 4px; }
+  .oss-modal .close { margin-top: 6px; text-align: right; }
+  .oss-modal .close button { padding: 6px 18px; border-radius: 8px; border: 1px solid var(--border); background: #fff; cursor: pointer; }
+  .oss-modal .close button:hover { border-color: var(--accent); color: var(--accent); }
   .input-row { max-width: 860px; margin: 0 auto; display: flex; gap: 10px; }
   #q {
     flex: 1; border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px;
@@ -103,8 +119,25 @@
 <header>
   <span class="logo">🟩</span>
   <h1>Qt 开发经验知识库 · RAG 问答</h1>
+  <button class="oss-btn" id="ossBtn">📦 开源项目</button>
   <div class="status" id="status">加载中…</div>
 </header>
+
+<div class="oss-modal-mask" id="ossModal">
+  <div class="oss-modal">
+    <h2>📦 开源项目</h2>
+    <div class="proj">
+      <b><a href="https://github.com/dahaioup/QtQa" target="_blank" rel="noopener">QtQa</a></b>（本项目）
+      <p>Qt 开发经验知识库 RAG 问答系统：bge 向量 + BM25 混合检索，Qwen2.5-1.5B 纯 CPU 本地生成，SSE 流式回答、引用溯源与三层防幻觉（资料外问题一律答「资料中未提及」），刷新断线自动续传。</p>
+    </div>
+    <div class="proj">
+      <b><a href="https://github.com/dahaioup/npa" target="_blank" rel="noopener">NPA (Node Proxy Agent)</a></b>
+      <p>单二进制、跨平台的内网节点管理代理：通过反向出站连接把分散在内网的 Windows/Linux/macOS 机器聚合成可管理网格，提供远程执行、文件分发、隧道映射、桌面控制与内置 MCP 工具面（可被任意 AI 程序直接驱动），支持守护式自动升级。</p>
+      <p>可用于 AI 开发过程中的自动打包、分发与测试：多机网格 + 节点文件面 + 远程执行，让 AI 工具一键把构建产物分发到各内网节点并自动回归。</p>
+    </div>
+    <div class="close"><button id="ossClose">关闭</button></div>
+  </div>
+</div>
 
 <div id="chat">
   <div class="msg assistant">
@@ -125,13 +158,6 @@
     <span class="hint">Qt 6 的 CMake 最低版本要求</span>
     <span class="hint" id="clearHist" style="color:#a15c3b">🗑 清空历史</span>
   </div>
-  <details class="oss">
-    <summary>开源项目 · <a href="https://github.com/dahaioup/QtQa" target="_blank" rel="noopener">QtQa</a> · <a href="https://github.com/dahaioup/npa" target="_blank" rel="noopener">NPA</a></summary>
-    <div class="oss-card">
-      <p><b><a href="https://github.com/dahaioup/QtQa" target="_blank" rel="noopener">QtQa</a></b> — 本项目。Qt 开发经验知识库 RAG 问答系统：bge 向量 + BM25 混合检索，Qwen2.5-1.5B 纯 CPU 本地生成，SSE 流式回答、引用溯源与三层防幻觉（资料外问题一律答「资料中未提及」），刷新断线自动续传。</p>
-      <p><b><a href="https://github.com/dahaioup/npa" target="_blank" rel="noopener">NPA (Node Proxy Agent)</a></b> — 单二进制、跨平台的内网节点管理代理：通过反向出站连接把分散在内网的 Windows/Linux/macOS 机器聚合成可管理网格，提供远程执行、文件分发、隧道映射、桌面控制与内置 MCP 工具面（可被任意 AI 程序直接驱动），支持守护式自动升级。</p>
-    </div>
-  </details>
 </footer>
 
 <script>
@@ -449,6 +475,13 @@ history = turns.slice(-3).flatMap(t => [
   send.textContent = '发送';
   abortCtrl = null;
 })();
+
+// 开源项目弹窗：点卡片打开，点关闭/点遮罩/Esc 关闭
+const ossModal = document.getElementById('ossModal');
+document.getElementById('ossBtn').onclick = () => ossModal.classList.add('show');
+document.getElementById('ossClose').onclick = () => ossModal.classList.remove('show');
+ossModal.onclick = e => { if (e.target === ossModal) ossModal.classList.remove('show'); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape') ossModal.classList.remove('show'); });
 </script>
 </body>
 </html>
