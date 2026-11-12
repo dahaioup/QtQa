@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import threading
 import time
 from pathlib import Path
@@ -27,17 +28,55 @@ _START = time.time()
 
 
 def _rss_mb() -> float:
-    """当前进程常驻内存（MB）。"""
+    """当前进程常驻内存（MB）。Windows 走 psapi，Unix 走 getrusage。"""
     try:
+        if sys.platform == "win32":
+            import ctypes
+
+            class _PMC(ctypes.Structure):
+                _fields_ = [("cb", ctypes.c_ulong), ("PageFaultCount", ctypes.c_ulong),
+                            ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                            ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                            ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                            ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t)]
+
+            pmc = _PMC()
+            pmc.cb = ctypes.sizeof(_PMC)
+            h = ctypes.c_void_p(-1)  # GetCurrentProcess 伪句柄；64 位下必须显式 c_void_p，否则符号扩展错导致 err=6
+            k32 = getattr(ctypes.windll.kernel32, "K32GetProcessMemoryInfo", None)
+            ok = (k32 and k32(h, ctypes.byref(pmc), pmc.cb)) or \
+                ctypes.windll.psapi.GetProcessMemoryInfo(h, ctypes.byref(pmc), pmc.cb)
+            if ok:
+                return round(pmc.WorkingSetSize / 1024 / 1024, 1)
+            return 0.0
         import resource
         ru = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-        return round(ru / 1024 / 1024, 1)          # macOS: bytes
+        divisor = 1024 * 1024 if sys.platform == "darwin" else 1024  # macOS: bytes / Linux: KB
+        return round(ru / divisor, 1)
     except Exception:
         return 0.0
 
 
 def _sys_mem() -> tuple[float | None, float | None]:
-    """整机内存 (总, 可用) GB。macOS sysconf 拿不到可用量，用 vm_stat 兜底。"""
+    """整机内存 (总, 可用) GB。Windows 用 GlobalMemoryStatusEx，macOS sysconf/vm_stat 兜底。"""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+
+            class _MS(ctypes.Structure):
+                _fields_ = [("dwLength", ctypes.c_ulong), ("dwMemoryLoad", ctypes.c_ulong),
+                            ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                            ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                            ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                            ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+            ms = _MS()
+            ms.dwLength = ctypes.sizeof(_MS)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
+                return round(ms.ullTotalPhys / 2**30, 1), round(ms.ullAvailPhys / 2**30, 1)
+        except Exception:
+            pass
+        return None, None
     try:
         total = os.sysconf("SC_PAGE_SIZE") * os.sysconf("SC_PHYS_PAGES") / 2**30
     except Exception:
@@ -67,13 +106,23 @@ def _cpu_info() -> tuple[int, int, float | None]:
         return _CPU_INFO
     logical, physical, freq = os.cpu_count() or 0, 0, None
     try:
-        import subprocess
-        out = subprocess.run(["sysctl", "-n", "hw.logicalcpu", "hw.physicalcpu",
-                              "hw.cpufrequency"], capture_output=True, text=True, timeout=2)
-        vals = out.stdout.split()
-        if len(vals) == 3:
-            logical, physical = int(vals[0]), int(vals[1])
-            freq = round(int(vals[2]) / 1e9, 2) if int(vals[2]) > 0 else None
+        if sys.platform == "win32":
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r"HARDWARE\DESCRIPTION\System\CentralProcessor\0") as k:
+                mhz = winreg.QueryValueEx(k, "~MHz")[0]
+                freq = round(mhz / 1000, 2)
+            logical = os.cpu_count() or 0
+            # 物理核拿不到精确拓扑，按超线程 2:1 近似
+            physical = max(1, logical // 2) if logical else 0
+        else:
+            import subprocess
+            out = subprocess.run(["sysctl", "-n", "hw.logicalcpu", "hw.physicalcpu",
+                                  "hw.cpufrequency"], capture_output=True, text=True, timeout=2)
+            vals = out.stdout.split()
+            if len(vals) == 3:
+                logical, physical = int(vals[0]), int(vals[1])
+                freq = round(int(vals[2]) / 1e9, 2) if int(vals[2]) > 0 else None
     except Exception:
         physical = logical
     if not physical:
